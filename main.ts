@@ -150,6 +150,87 @@ export default class ObsidianColumns extends Plugin {
 		Object.assign(el.style, styles)
 	}
 
+	addImageClickListener = (element: HTMLElement) => {
+		const images = element.querySelectorAll('img');
+		images.forEach((img) => {
+			// Skip if we've already set up this image
+			if (img.hasAttribute('data-fullscreen-enabled')) {
+				return;
+			}
+			
+			img.setAttribute('data-fullscreen-enabled', 'true');
+			img.style.cursor = 'pointer';
+			img.addEventListener('click', (event) => {
+				event.preventDefault();
+				event.stopPropagation();
+				this.createFullscreenImage(img.src);
+			});
+		});
+	}
+
+	createFullscreenImage = (src: string) => {
+		// Remove any existing overlays first
+		const existingOverlay = document.querySelector('.obsidian-columns-fullscreen-overlay');
+		if (existingOverlay) {
+			document.body.removeChild(existingOverlay);
+		}
+		
+		const overlay = document.createElement('div');
+		overlay.className = 'obsidian-columns-fullscreen-overlay';
+		overlay.style.position = 'fixed';
+		overlay.style.top = '0';
+		overlay.style.left = '0';
+		overlay.style.width = '100%';
+		overlay.style.height = '100%';
+		overlay.style.display = 'flex';
+		overlay.style.justifyContent = 'center';
+		overlay.style.alignItems = 'center';
+		overlay.style.zIndex = '1000';
+		
+		// Adjust overlay color based on theme
+		if (document.body.classList.contains('theme-light')) {
+			overlay.style.backgroundColor = 'rgba(255, 255, 255, 0.7)';
+		} else {
+			overlay.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+		}
+		
+		const img = document.createElement('img');
+		img.src = src;
+		img.style.maxHeight = '95%';
+		img.style.maxWidth = '95%';
+		img.style.objectFit = 'contain';
+		img.style.boxShadow = '0 0 20px rgba(0, 0, 0, 0.3)';
+		
+		overlay.appendChild(img);
+		document.body.appendChild(overlay);
+		
+		// Close on overlay click, but prevent event propagation
+		overlay.addEventListener('click', (event) => {
+			event.preventDefault();
+			event.stopPropagation();
+			
+			// Only close if clicking the overlay itself, not the image
+			if (event.target === overlay) {
+				document.body.removeChild(overlay);
+			}
+		});
+		
+		// Also close when Escape key is pressed
+		const handleKeyDown = (event: KeyboardEvent) => {
+			if (event.key === 'Escape') {
+				document.body.removeChild(overlay);
+				document.removeEventListener('keydown', handleKeyDown);
+			}
+		};
+		document.addEventListener('keydown', handleKeyDown);
+		
+		// Stop image click propagation
+		img.addEventListener('click', (event) => {
+			event.preventDefault();
+			event.stopPropagation();
+		});
+	}
+
 	settings: ColumnSettings;
 
 	processChild = (c: HTMLElement) => {
@@ -192,7 +273,9 @@ export default class ObsidianColumns extends Plugin {
 				child,
 				sourcePath,
 				renderChild
-			);
+			).then(() => {
+				this.addImageClickListener(child);
+			});
 			if (settings.flexGrow != null) {
 				let flexGrow = parseFloat((settings as CSSStyleDeclaration).flexGrow)
 				let CSS = this.generateCssString(flexGrow)
@@ -231,6 +314,12 @@ export default class ObsidianColumns extends Plugin {
 					sourcePath,
 					renderChild
 				);
+				
+				// After rendering completes, add image click listeners
+				renderAwait.then(() => {
+					this.addImageClickListener(child);
+				});
+				
 				let parent = el.createEl("div", { cls: "columnParent" });
 				Array.from(child.children).forEach((c: HTMLElement) => {
 					let cc = parent.createEl("div", { cls: "columnChild" })
@@ -389,7 +478,10 @@ export default class ObsidianColumns extends Plugin {
 			}
 		}
 
-		this.registerMarkdownPostProcessor((element, context) => { processList(element, context) });
+		this.registerMarkdownPostProcessor((element, context) => { 
+			processList(element, context);
+			this.addImageClickListener(element);
+		});
 	}
 
 	private applyPotentialBorderStyling(settings: COLMDSETTINGS | COLSETTINGS, child: HTMLDivElement) {
@@ -422,7 +514,11 @@ export default class ObsidianColumns extends Plugin {
 	}
 
 	onunload() {
-
+		// Clean up any potential fullscreen overlays
+		const overlay = document.querySelector('.obsidian-columns-fullscreen-overlay');
+		if (overlay) {
+			document.body.removeChild(overlay);
+		}
 	}
 
 	async loadSettings() {
