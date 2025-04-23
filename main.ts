@@ -200,6 +200,80 @@ export default class ObsidianColumns extends Plugin {
 		img.style.maxWidth = '95%';
 		img.style.objectFit = 'contain';
 		img.style.boxShadow = '0 0 20px rgba(0, 0, 0, 0.3)';
+		img.style.transition = 'transform 0.1s ease';
+		img.style.transformOrigin = 'center';
+		
+		// Setup zoom functionality
+		let scale = 1;
+		const MIN_SCALE = 0.5;
+		const MAX_SCALE = 5;
+		const SCALE_FACTOR = 0.1;
+		
+		// Handle wheel zoom
+		overlay.addEventListener('wheel', (e: WheelEvent) => {
+			e.preventDefault();
+			const delta = e.deltaY > 0 ? -1 : 1;
+			const newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, scale + delta * SCALE_FACTOR));
+			
+			if (newScale !== scale) {
+				scale = newScale;
+				img.style.transform = `scale(${scale})`;
+			}
+		}, { passive: false });
+		
+		// Handle pinch zoom for touch devices
+		let initialDistance = 0;
+		let initialScale = 1;
+		
+		overlay.addEventListener('touchstart', (e: TouchEvent) => {
+			if (e.touches.length === 2) {
+				e.preventDefault();
+				initialDistance = Math.hypot(
+					e.touches[0].pageX - e.touches[1].pageX,
+					e.touches[0].pageY - e.touches[1].pageY
+				);
+				initialScale = scale;
+			}
+		}, { passive: false });
+		
+		overlay.addEventListener('touchmove', (e: TouchEvent) => {
+			if (e.touches.length === 2) {
+				e.preventDefault();
+				const distance = Math.hypot(
+					e.touches[0].pageX - e.touches[1].pageX,
+					e.touches[0].pageY - e.touches[1].pageY
+				);
+				
+				const newScale = Math.max(
+					MIN_SCALE,
+					Math.min(MAX_SCALE, initialScale * (distance / initialDistance))
+				);
+				
+				scale = newScale;
+				img.style.transform = `scale(${scale})`;
+			}
+		}, { passive: false });
+		
+		// Double tap to reset zoom
+		let lastTap = 0;
+		overlay.addEventListener('touchend', (e: TouchEvent) => {
+			const now = new Date().getTime();
+			const timeSince = now - lastTap;
+			
+			if (timeSince < 300 && timeSince > 0) {
+				// Double tap detected
+				scale = 1;
+				img.style.transform = 'scale(1)';
+			}
+			
+			lastTap = now;
+		});
+		
+		// Double click to reset zoom
+		overlay.addEventListener('dblclick', () => {
+			scale = 1;
+			img.style.transform = 'scale(1)';
+		});
 		
 		overlay.appendChild(img);
 		document.body.appendChild(overlay);
